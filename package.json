@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "ts-node -T index.ts",
+    "start2": "ts-node -T index.ts",
+    "start": "ts-node -T runner.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -12,9 +13,21 @@
   "license": "ISC",
   "dependencies": {
     "code-block-writer": "^11.0.3",
-    "prettier": "^2.8.1",
+    "glob": "^8.1.0",
+    "@types/glob": "^8.0.1",
+    "@types/prettier": "^2.7.2",
+    "prettier": "^2.8.3",
     "ts-morph": "^17.0.1",
     "ts-node": "^10.9.1",
-    "typescript": "^4.9.4"
+    "typescript": "^4.9.4",
+    "prettier-plugin-organize-imports": "^3.2.3",
+    "prettier-plugin-tailwindcss": "^0.4.1",
+    "@tailwindcss/aspect-ratio": "^0.4.2",
+    "@tailwindcss/forms": "^0.5.3",
+    "@tailwindcss/line-clamp": "^0.4.2",
+    "@tailwindcss/typography": "^0.5.9",
+    "@typescript-eslint/eslint-plugin": "^5.57.0",
+    "@typescript-eslint/parser": "^5.57.0",
+    "tailwindcss": "^3.3.3"
   }
 }
