@@ -1,3 +1,4 @@
+import fs from 'fs';
 import prettier from 'prettier/standalone';
 import typescriptPlugin from 'prettier/parser-typescript';
 import {Project, ts} from 'ts-morph';
@@ -11,6 +12,7 @@ import type {
   JsxOpeningElement,
   JsxSelfClosingElement,
 } from 'typescript';
+import {glob} from 'glob';
 
 const project = new Project();
 let replaceStyles = {
@@ -52,6 +54,11 @@ let replaceStyles = {
   borderLeft: 'border-l',
   borderRight: 'border-r',
   borderBottom: 'border-b',
+  borderColor: 'border',
+  borderStyle: 'border',
+  gap: 'gap',
+  transform: 'transform',
+  textShadow: 'shadow',
   fontSize: 'text',
   color: 'text',
   fontWeight: 'font',
@@ -112,14 +119,14 @@ const lookups = {
   block: 'block',
   bold: 'font-bold',
   border: '',
-  borderB: '',
+  borderB: 'border-b-1',
   borderBlue: '',
   borderFull: '',
   borderInput: '',
-  borderL: 'border-l-1 border-',
-  borderR: '',
+  borderL: 'border-l-1',
+  borderR: 'border-r-1',
   borders: '',
-  borderT: '',
+  borderT: 'border-t-1',
   brightenHover: '',
   brighter: '',
   button: '',
@@ -304,11 +311,11 @@ const lookups = {
   'mv-xs': 'my-1',
   'mv-xxs': 'my-0.5',
   noFont: '',
-  noSelect: '',
-  noTouch: '',
-  objectContain: '',
-  objectCover: '',
-  onlyOneLine: '',
+  noSelect: 'user-select-none',
+  noTouch: 'pointer-events-none',
+  objectContain: 'object-contain',
+  objectCover: 'object-cover',
+  onlyOneLine: 'only-one-line',
   'overflow-hidden': 'overflow-hidden',
   'overflow-y-auto': 'overflow-y-auto',
   'overflow-y-scroll': 'overflow-y-scroll',
@@ -416,6 +423,10 @@ function hyphenToCamelCase(escapedText: string) {
 
 export function processFile(name: string, src: string) {
   console.log('processing', name);
+
+  src = src.replaceAll(' ss,', ' className,');
+  src = src.replaceAll(' ss?: SSType;', ' className: string;');
+
   const sourceFile = project.createSourceFile(name, src, {overwrite: true});
   let factory = ts.factory;
   let classIndex = 0;
@@ -444,7 +455,13 @@ export function processFile(name: string, src: string) {
 
         const jsxNode = node as JsxAttributes;
         let properties = jsxNode.properties;
-        if (!jsxNode.properties.some((e) => ((e.name as Identifier)?.escapedText as string)?.indexOf('use:ss') === 0))
+        if (
+          !jsxNode.properties.some(
+            (e) =>
+              ((e.name as Identifier)?.escapedText as string)?.indexOf('use:ss') === 0 ||
+              ((e.name as Identifier)?.escapedText as string)?.indexOf('ss') === 0
+          )
+        )
           return node;
         const foundProps: JsxAttributeLike[] = [];
         let classAttribute: JsxAttributeValue | null = null;
@@ -457,7 +474,7 @@ export function processFile(name: string, src: string) {
           }
           assertType<JsxAttribute>(property);
           let name = (property.name as Identifier)?.escapedText as string;
-          if (name === 'use:ss') {
+          if (name === 'use:ss' || name === 'ss') {
             assertType<JsxExpression>(property.initializer);
 
             let template = SSToTailwind(property.initializer.expression?.getText()!);
@@ -491,12 +508,14 @@ export function processFile(name: string, src: string) {
               styleText = styleAttribute.expression?.getText();
               break;
             case ts.SyntaxKind.StringLiteral:
-              styleText = styleAttribute.getText();
+              styleText = styleStringToStyleObject(styleAttribute.getText());
               break;
           }
         }
         if (classText) {
           classNodes[classNodes.length - 1][1] = `clsx(${classText},${classNodes[classNodes.length - 1][1]})`;
+        } else {
+          debugger;
         }
         if (styleText && styleObject) {
           throw new Error('Cannot have both style and use:ss');
@@ -528,11 +547,13 @@ export function processFile(name: string, src: string) {
     }
     return node;
   });
+  if (classNodes.length === 0) return src;
+
   classNodes[classNodes.length - 1][0] = classIndex - 1;
   if (styleNodes.length > 0) {
     styleNodes[styleNodes.length - 1][0] = styleIndex - 1;
   }
-  debugger;
+
   for (const d of sourceFile.getDescendants()) {
     if (d.wasForgotten()) continue;
     for (const classNode of classNodes) {
@@ -553,7 +574,6 @@ export function processFile(name: string, src: string) {
         d?.compilerNode?.name?.escapedText === 'style' &&
         d?.compilerNode?.initializer?.kind === ts.SyntaxKind.StringLiteral
       ) {
-        debugger;
         if (d.compilerNode?.initializer?.text === c.toString()) {
           d.replaceWithText(`style={${styleNode[1]}}`);
           break;
@@ -580,16 +600,28 @@ export function processFile(name: string, src: string) {
 
 export function assertType<T>(assertion: any): asserts assertion is T {}
 
+function styleStringToStyleObject(style: string): {[key: string]: string} {
+  let result: {[key: string]: string} = {};
+  for (const line of style.split(';')) {
+    const [key, value] = line.split(':');
+    result[key.trim()] = value.trim();
+  }
+  return result;
+}
+
 function hyphenate(prop: string) {
   if (prop.indexOf('--') === 0) return prop;
   return prop.replace(/[A-Z]/g, function (match) {
     return '-' + match.toLowerCase();
   });
 }
-/*
-glob('C:/code/quickgame2/editor/src/!**!/!*.tsx', {}, function (er, files) {
+glob('C:/code/quickgame2/editor/src/**/*.tsx', {}, function (er, files) {
+  console.log(files.length);
+  files = files.sort((a, b) => a - b);
   for (const file of files) {
     const code = fs.readFileSync(file, {encoding: 'utf8'});
+    console.log(file);
+    // console.log(code)
     // console.log(processFile(file, code));
 
     let result = prettier.format(processFile(file, code), {
@@ -603,41 +635,82 @@ glob('C:/code/quickgame2/editor/src/!**!/!*.tsx', {}, function (er, files) {
       endOfLine: 'auto',
     });
     fs.writeFileSync(file, result, {encoding: 'utf8'});
+    console.log('done', file);
 
     // console.log(result);
   }
+  console.log('done');
+  glob('C:/code/quickgame2/clientCommon/src/**/*.tsx', {}, function (er, files) {
+    files = files.sort((a, b) => a - b);
+    for (const file of files) {
+      const code = fs.readFileSync(file, {encoding: 'utf8'});
+      // console.log(processFile(file, code));
+
+      let result = prettier.format(processFile(file, code), {
+        parser: 'typescript',
+        plugins: [typescriptPlugin],
+        tabWidth: 2,
+        singleQuote: true,
+        printWidth: 120,
+        bracketSpacing: false,
+        trailingComma: 'es5',
+        endOfLine: 'auto',
+      });
+      fs.writeFileSync(file, result, {encoding: 'utf8'});
+
+      // console.log(result);
+    }
+  });
 });
-glob('C:/code/quickgame2/clientCommon/src/!**!/!*.tsx', {}, function (er, files) {
-  for (const file of files) {
-    const code = fs.readFileSync(file, {encoding: 'utf8'});
-    // console.log(processFile(file, code));
-
-    let result = prettier.format(processFile(file, code), {
-      parser: 'typescript',
-      plugins: [typescriptPlugin],
-      tabWidth: 2,
-      singleQuote: true,
-      printWidth: 120,
-      bracketSpacing: false,
-      trailingComma: 'es5',
-      endOfLine: 'auto',
-    });
-    fs.writeFileSync(file, result, {encoding: 'utf8'});
-
-    // console.log(result);
-  }
-});*/
-
+/*
 const result2 = processFile(
   'abc.tsx',
   `
-  <div use:ss={SS.height(foo)} ></div>
+  <div
+            use:ss={SS.noSelect.color_white.radius_button.size2xl.text_break_word
+              .paddingLeft('m')
+              .paddingRight('s')
+              .paddingTop('s')
+              .paddingBottom('s')
+              .backgroundColor('darkerBlue')
+              .border('solid 1px #ffffff33')}
+          >
+            {eSwitch(action.conditions!.condition.type, {
+              counterCompare: () => 'Compare A Counter',
+              flagCompare: () => 'Compare A Flag',
+              positionCompare: () => 'Compare A Position',
+              velocityCompare: () => 'Compare A Velocity',
+            })}
+            <div use:ss={SS.f1}></div>
+            <div
+              use:ss={SS.block.noFont.color('#bd0a0a')}
+              onClick={() => {
+                setAction({
+                  ...action,
+                  conditions: undefined,
+                });
+              }}
+            >
+              Clear
+            </div>
+          </div>
   `
 );
-
 console.log(result2);
+*/
 
 function SSToTailwind(text: string): {classString: string; styles: string} {
+  let iconThing1 = false;
+  let iconThing2 = false;
+  if (text.includes("[p.image as 'icon']")) {
+    iconThing2 = true;
+    text = text.replaceAll("[p.image as 'icon']", '');
+  }
+  if (text.includes("[icon as 'icon']")) {
+    iconThing1 = true;
+    text = text.replaceAll("[icon as 'icon']", '');
+  }
+
   const CSSPropsThatTakePX = [
     'width',
     'height',
@@ -766,7 +839,6 @@ function SSToTailwind(text: string): {classString: string; styles: string} {
           if (innerOutput.startsWith("'") && innerOutput.endsWith("'")) {
             params.push({type: 'constant', value: innerOutput.slice(1, -1)});
           } else {
-            debugger;
             params.push({type: 'variable', value: innerOutput});
           }
           output += str[i];
@@ -783,6 +855,7 @@ function SSToTailwind(text: string): {classString: string; styles: string} {
     return [output, params] as const;
   }
   let params: {type: 'constant' | 'variable'; value: string}[];
+
   [text, params] = replaceNestedParentheses(text);
   const SS = $SS();
   const func = new Function('SS', `return ${text}.$$$PROCESS`);
@@ -822,11 +895,11 @@ function SSToTailwind(text: string): {classString: string; styles: string} {
     }
     throw new Error(`Invalid value ${value}`);
   };
+
   const classes = j.classes.map(parseOut);
   // const styles = Object.entries(j.styles).map(parseOutStyle);
-  const template = '`' + classes.join(' ') + '`';
+  let template = '`' + classes.join(' ') + (iconThing1 ? ' ${icon}' : '') + (iconThing2 ? ' ${p.image}' : '') + '`';
   // console.log(styles);
-
   return {classString: template, styles: stylesOutput.length === 0 ? null : `{${stylesOutput}}`};
   // console.log(classes, j.styles);
 }
